@@ -29,7 +29,7 @@ class Program
     }
 
     private static void ScanForConfigurations(string? directory)
-    {        
+    {
         string[] configurationFlags = {
             "AllowEngagementDateChange",
             "ShowEmployeeClocksTSE",
@@ -501,22 +501,88 @@ class Program
             "WeekdayStart",
             "WinSMSFTP",
             "ZonePercentage"
-        };        
-        
-        configUsage.Clear();               
+        };
 
+        configUsage.Clear();
+
+        ScanConfigUseInSqlFiles(directory, configurationFlags);
+        ScanConfigUseInCsFiles(directory, configurationFlags);
+        var sb = new StringBuilder();
+        var mostConfiguredFiles = configUsage.GroupBy(x => x.Item1).OrderByDescending(g => g.Count());
+        sb.AppendLine();
+        sb.AppendLine("===============================================================================");
+        sb.AppendLine();        
+        mostConfiguredFiles.ToList().ForEach(x => sb.AppendLine($"[{x.Key}] has {x.Count()} configuration paths"));
+        sb.AppendLine();
+        sb.AppendLine("===============================================================================");
+        sb.AppendLine();
+        var mostUsedConfiguration = configUsage.GroupBy(x => x.Item2).OrderByDescending(g => g.Count());
+        mostUsedConfiguration.ToList().ForEach(x => sb.AppendLine($"[{x.Key}] is used in {x.Count()} Places"));
+        sb.AppendLine();
+        sb.AppendLine("===============================================================================");
+        sb.AppendLine();
+        var unusedConfigs = configurationFlags.Except(configUsage.GroupBy(x => x.Item2).Select(g => g.Key).ToList());
+        sb.AppendLine($"number of unused configs {unusedConfigs.Count()}");
+        sb.AppendLine();
+        sb.AppendLine("===============================================================================");
+        sb.AppendLine();
+        unusedConfigs.ToList().ForEach(x => sb.AppendLine($"Unused Config : {x}"));
+        File.WriteAllText($"output_{DateTime.Now.ToString("yyyyMMdd")}_.txt", sb.ToString());
+        Console.ReadLine();
+    }
+
+    private static void ScanConfigUseInSqlFiles(string? directory, string[] configurationFlags)
+    {
         var csFiles = Directory.GetFiles(directory, "*.sql", SearchOption.AllDirectories);
 
         foreach (var file in csFiles)
         {
-            Console.WriteLine($"Scanning {file}...");            
+            if (!file.EndsWith("InstallBlitz.sql"))
+            {
+
+                Console.WriteLine($"Scanning {file}...");
+
+                var sql = File.ReadAllText(file);
+
+                foreach (string flagsPattern in configurationFlags)
+                {
+
+                    string pattern = $"\\bIF\\b[\\s\\S]*?\\b({flagsPattern})\\b";
+
+                    var matches = Regex.Matches(sql, pattern, RegexOptions.IgnoreCase);
+
+                    foreach (Match match in matches)
+                    {
+                        AddMatch(file, flagsPattern);
+                    }
+                    pattern = $"\\bWHEN\\b[\\s\\S]*?\\b({flagsPattern})\\b";
+
+                    matches = Regex.Matches(sql, pattern, RegexOptions.IgnoreCase);
+
+                    foreach (Match match in matches)
+                    {
+                        AddMatch(file, flagsPattern);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void ScanConfigUseInCsFiles(string? directory, string[] configurationFlags)
+    {
+        var csFiles = Directory.GetFiles(directory, "*.cs", SearchOption.AllDirectories);
+
+        foreach (var file in csFiles)
+        {
+            Console.WriteLine($"Scanning {file}...");
 
             var sql = File.ReadAllText(file);
 
             foreach (string flagsPattern in configurationFlags)
             {
-                
-                string pattern = $"\\bIF\\b[\\s\\S]*?\\b({flagsPattern})\\b";
+
+                string pattern = $@"if\s*\([\s\S]*?\b({flagsPattern})\b";
+
 
                 var matches = Regex.Matches(sql, pattern, RegexOptions.IgnoreCase);
 
@@ -524,18 +590,17 @@ class Program
                 {
                     AddMatch(file, flagsPattern);
                 }
+                pattern = $"\\bswitch\\b[\\s\\S]*?\\b({flagsPattern})\\b";
+
+                matches = Regex.Matches(sql, pattern, RegexOptions.IgnoreCase);
+
+                foreach (Match match in matches)
+                {
+                    AddMatch(file, flagsPattern);
+                }
             }
+
         }
-        var sb = new StringBuilder();
-        var mostConfiguredFiles = configUsage.GroupBy(x => x.Item1).OrderByDescending(g => g.Count());
-        mostConfiguredFiles.Take(10).ToList().ForEach(x => sb.AppendLine($"{x.Key} has {x.Count()} configuration paths"));
-
-        var mostUsedConfiguration = configUsage.GroupBy(x => x.Item2).OrderByDescending(g => g.Count());
-        mostUsedConfiguration.Take(10).ToList().ForEach(x => sb.AppendLine($"{x.Key} is used in {x.Count()} Places"));
-
-        var unusedConfigs = configurationFlags.Except(configUsage.GroupBy(x => x.Item2).Select(g => g.Key).ToList());
-        unusedConfigs.ToList().ForEach(x => sb.AppendLine($"Unused Config : {x}"));
-        File.WriteAllText($"output_{DateTime.Now.ToString("YYYYMMDD")}_.txt", sb.ToString());
     }
 
     private static void AddMatch(string file, string flagsPattern)

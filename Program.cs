@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Text.RegularExpressions;
 
 class Program
@@ -525,14 +526,16 @@ class Program
                 }
             }
         }
+        var sb = new StringBuilder();
         var mostConfiguredFiles = configUsage.GroupBy(x => x.Item1).OrderByDescending(g => g.Count());
-        mostConfiguredFiles.Take(10).ToList().ForEach(x => Console.WriteLine($"{x.Key} has {x.Count()} configuration paths"));
+        mostConfiguredFiles.Take(10).ToList().ForEach(x => sb.AppendLine($"{x.Key} has {x.Count()} configuration paths"));
 
         var mostUsedConfiguration = configUsage.GroupBy(x => x.Item2).OrderByDescending(g => g.Count());
-        mostUsedConfiguration.Take(10).ToList().ForEach(x => Console.WriteLine($"{x.Key} is used in {x.Count()} Places"));
+        mostUsedConfiguration.Take(10).ToList().ForEach(x => sb.AppendLine($"{x.Key} is used in {x.Count()} Places"));
 
         var unusedConfigs = configurationFlags.Except(configUsage.GroupBy(x => x.Item2).Select(g => g.Key).ToList());
-        unusedConfigs.ToList().ForEach(x => Console.WriteLine($"Unused Config : {x}"));
+        unusedConfigs.ToList().ForEach(x => sb.AppendLine($"Unused Config : {x}"));
+        File.WriteAllText($"output_{DateTime.Now.ToString("YYYYMMDD")}_.txt", sb.ToString());
     }
 
     private static void AddMatch(string file, string flagsPattern)

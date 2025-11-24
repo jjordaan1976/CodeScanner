@@ -14,7 +14,7 @@ class Program
         if (args.Length == 0)
         {
             ScanForSmells(directory);
-            ScanForConfigurations(directory);
+            //ScanForConfigurations(directory);
         }
         else
         {
@@ -666,12 +666,14 @@ class Program
         int totalCaughtRethrowCount = 0;
         int totalSwitchStatementsCount = 0;
         int totalCaseStatementsInSqlCount = 0;
+        int totalWhenStatementsInSqlCount = 0;
         int totalDynamicSqlExecution = 0;
         int totalCursorsCreatedCount = 0;
         int totalWriteToViewCount = 0;
         int totalTransactionsWithoutErrorHandlingCount = 0;
         int totalSelectDistinctCount = 0;
         int totalSelectTopCount = 0;
+        int totalGotoStatementCount = 0;
 
         Console.WriteLine("\nScanning .cs files...\n");
 
@@ -686,11 +688,13 @@ class Program
             int caughtRethrowCount = Regex.Matches(content, @"catch\s*\(\s*(\w+)\s+\w+\s*\)[^}]*throw\s+\w+\s*;", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int switchStatementCount = Regex.Matches(content, @"switch\s*\([^\)]*\)\s*\{[^}]*\}", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int moreThanTwoIfElse = Regex.Matches(content, @"(?i)(?:else\s+if\s*\([^\)]*\)\s*\{[^}]*\}){2,}", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline).Count;
+            int gotoStatementCount = Regex.Matches(content, @"\bGOTO\b", RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
 
             totalAsyncVoidCount += asyncVoidCount;
             totalEmptyCatchCount += emptyCatchCount;
             totalCaughtRethrowCount += caughtRethrowCount;
             totalSwitchStatementsCount += (switchStatementCount + moreThanTwoIfElse);
+            totalGotoStatementCount += gotoStatementCount;
 
             if (asyncVoidCount > 0 || emptyCatchCount > 0 || caughtRethrowCount > 0 || (switchStatementCount + moreThanTwoIfElse) > 0)
             {
@@ -712,15 +716,18 @@ class Program
             var content = File.ReadAllText(file);
 
             int caseStatementsInSql = Regex.Matches(content, @"(?i)\bCASE\b.*?\bEND\b", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
+            int whenStatementsInSql = Regex.Matches(content, @"(?i)\bWHEN\b", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
+            int iifStatementsInSql = Regex.Matches(content, @"\bIIF\s*\(", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int dynamicSqlExecution = Regex.Matches(content, @"(?i)\bEXEC(?:UTE)?\b\s*(?:sp_executesql|\(@?.*?\)|'[^']*')", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int cursorCreated = Regex.Matches(content, @"(?i)\bDECLARE\b\s+\w+\s+\bCURSOR\b\s+\bFOR\b", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int WriteToView = Regex.Matches(content, @"(?i)\b(?:merge\s+into|update|insert\s+into)\s+(?:\[\w+\]\.)?(?:\[\s*vw\w+\s*\]|vw\w+)", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int transactionsWithoutErrorHandling = Regex.Matches(content, @"(?i)\bbegin\s+tran\b|\bcommit\b(?!.*rollback)|\brollback\b(?!.*commit)", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int selectDistinct = Regex.Matches(content, @"(?i)\bselect\s+distinct\b", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
             int selectTop = Regex.Matches(content, @"(?i)\bselect\s+top\b", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
-            int moreThanTwoIfElse = Regex.Matches(content, @"(?i)(?:(?:ELSE\s+IF|ELSEIF)\s+[^\s]+\s+THEN[^;]*;?){2,}", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
+            int ifThenStatements = Regex.Matches(content, @"(?i)\bIF\s+.+?\s+THEN\b", RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled).Count;
 
-            totalCaseStatementsInSqlCount += (caseStatementsInSql + moreThanTwoIfElse);
+            totalCaseStatementsInSqlCount += caseStatementsInSql;
+            totalWhenStatementsInSqlCount += (whenStatementsInSql + ifThenStatements + iifStatementsInSql);
             totalDynamicSqlExecution += dynamicSqlExecution;
             totalCursorsCreatedCount += cursorCreated;
             totalWriteToViewCount += WriteToView;
@@ -728,24 +735,26 @@ class Program
             totalSelectDistinctCount += selectDistinct;
             totalSelectTopCount += selectTop;
 
-            if ((caseStatementsInSql + moreThanTwoIfElse) > 0 || dynamicSqlExecution > 0 || cursorCreated > 0 || WriteToView > 0 || transactionsWithoutErrorHandling > 0 || selectDistinct > 0 || selectTop > 0)
+            if ((whenStatementsInSql + ifThenStatements+iifStatementsInSql) > 0 || dynamicSqlExecution > 0 || cursorCreated > 0 || WriteToView > 0 || transactionsWithoutErrorHandling > 0 || selectDistinct > 0 || selectTop > 0)
             {
                 Console.WriteLine($"{Path.GetFileName(file)}:");
 
                 if (caseStatementsInSql > 0)
-                    Console.WriteLine($"  - switch statements: {(caseStatementsInSql + moreThanTwoIfElse)}");
+                    Console.WriteLine($" - case statements: {caseStatementsInSql}");
+                if (whenStatementsInSql + ifThenStatements > 0)
+                    Console.WriteLine($" - when statements: {(whenStatementsInSql + ifThenStatements+ iifStatementsInSql)}");
                 if (dynamicSqlExecution > 0)
-                    Console.WriteLine($"  - dynamic Sql Execution: {dynamicSqlExecution}");
+                    Console.WriteLine($" - dynamic Sql Execution: {dynamicSqlExecution}");
                 if (cursorCreated > 0)
-                    Console.WriteLine($"  - Cursors Created: {cursorCreated}");
+                    Console.WriteLine($" - Cursors Created: {cursorCreated}");
                 if (WriteToView > 0)
-                    Console.WriteLine($"  - Update, Insert or  Megre on View: {WriteToView}");
+                    Console.WriteLine($" - Update, Insert or  Megre on View: {WriteToView}");
                 if (transactionsWithoutErrorHandling > 0)
-                    Console.WriteLine($"  - Transactions Without Error Handling: {transactionsWithoutErrorHandling}");
+                    Console.WriteLine($" - Transactions Without Error Handling: {transactionsWithoutErrorHandling}");
                 if (selectDistinct > 0)
-                    Console.WriteLine($"  - Select Distinct: {selectDistinct}");
+                    Console.WriteLine($" - Select Distinct: {selectDistinct}");
                 if (selectTop > 0)
-                    Console.WriteLine($"  - Select Top: {selectTop}");
+                    Console.WriteLine($" - Select Top: {selectTop}");
             }
         }
 
@@ -755,6 +764,8 @@ class Program
         Console.WriteLine($"Caught exception rethrows: {totalCaughtRethrowCount}: This is bad because it resets the stack trace, hiding the original source of the error");
         Console.WriteLine($"switch statements: {totalSwitchStatementsCount}: This is bad because it can point to a Open Close Principle Violation");
         Console.WriteLine($"Case statements: {totalCaseStatementsInSqlCount}: Sees Paragraph below");
+        Console.WriteLine($"WHEN statements: {totalWhenStatementsInSqlCount}: Sees Paragraph below");
+        Console.WriteLine($"Goto Statements: {totalGotoStatementCount}: Do I even need to explain?");
         Console.WriteLine($"dynamic Sql Execution: {totalDynamicSqlExecution}: This is bad because it the dacpac publish won't detect broken SQL statements");
         Console.WriteLine($"Cursors Created: {totalCursorsCreatedCount}: This is bad because Forces row-by-row processing (RBAR), which is slow and can cause locks");
         Console.WriteLine($"Update, Insert or  Merge on View: {totalWriteToViewCount}: This is bad because it the stored procs or view can be altered without interim release process detecting that the update won't work anymore");
